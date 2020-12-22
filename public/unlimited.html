@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wiatava UNLIMITED Upload</title>
+
+
+    <style media="screen">
+      body { display: flex; min-height: 100vh; width: 100%; background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; align-items: center; justify-content: center; flex-direction: column }
+      #uploader{
+        -webkit-appearance: none;
+        appearance: none;
+        background-color:#026cc1;
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      .failure{
+        color:#AA0000;
+        display: block;
+      }
+      .success{
+        color:#00AA00;
+        display: block;
+      }
+      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
+      #message h2 { color: #026cc1; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
+      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
+      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
+      /*#message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }*/
+      /*#message input { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
+      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }*/
+      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
+      @media (max-width: 600px) {
+        body, #message { margin-top: 0; background: white; box-shadow: none; }
+        body { border-top: 16px solid #026cc1; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="message" style='position:relative'>
+      <img src='//wiatava.org/wp-content/uploads/2015/06/OA2-960x326.png' style="width:100%; position:relative;" />
+      <h1>Wiatava Lodge Banquet Unlimited File Size Upload</h1>
+      <h2>Welcome <span id="user_name"></span> (<span id="user_email"></span>)</h2>
+      <button onclick="signOut()">Sign Out</button>
+      <h3 id="uploader-message"></h3>
+      <progress value="0" max="100" id="uploader">0%</progress>
+      <input type="file" value="upload" id="fileButton" multiple/>
+      <div style="font-weight: 300;">
+        <h4>Questions?</h4>
+        <ul>
+          <li><b>Can I upload more than one file at a time?</b> Yes, the upload bar may freak out a bit, but it will upload them all. The status of each upload will be displayed and you can retry it if needed.</li>
+          <li><b>After my files uploaded, can I add more?</b> Yes, you don't need to refresh the page, just go into the file selector again and choose another batch of files.</li>
+          <li><b>What is the maximum file size I can upload?</b> This page does not restrict the file size. Please don't abuse this.</li>
+          <li><b>Why can't I use incognito?</b> Browser limitations and the fact that I didn't want to spend the time handling that edge case.</li>
+        </ul>
+      </div>
+    </div>
+    <script src="/__/firebase/8.2.1/firebase-app.js"></script>
+    <script src="/__/firebase/8.2.1/firebase-analytics.js"></script>
+    <script src="/__/firebase/8.2.1/firebase-storage.js"></script>
+    <script src="/__/firebase/8.2.1/firebase-auth.js"></script>
+    <script src="/__/firebase/init.js"></script>
+
+    <script>
+      function signOut(){
+        firebase.auth().signOut().then(function() {
+          console.log("Signed out")
+          location.reload();
+        }).catch(function(error) {
+          console.error("Unable to sign out. Details:", error)
+        });
+      }
+      var uploader = document.getElementById('uploader');
+      var fileButton = document.getElementById('fileButton');
+      var uploaderMessage = document.getElementById('uploader-message');
+      var provider = new firebase.auth.GoogleAuthProvider();
+      var username = undefined;
+      firebase.auth().getRedirectResult().then(result=> {
+        if (result.user || firebase.auth().currentUser) {
+          // console.log("Signed in as ", firebase.auth().currentUser)
+          document.getElementById('user_name').innerText= firebase.auth().currentUser.displayName;
+          document.getElementById('user_email').innerText= firebase.auth().currentUser.email;
+          username=firebase.auth().currentUser.email;
+        } else {
+          firebase.auth().signInWithRedirect(provider);
+        }
+      });
+
+      fileButton.addEventListener('change', function (e) {
+        if (username) {
+          var tasks = [];
+          var timestamp = Date.now();
+          for (var i = 0; i < e.target.files.length; i++) {
+            uploader.style.visibility = "visible";
+            uploaderMessage.innerText = "";
+            var file = e.target.files[i];
+            var storageRef = firebase.storage().ref('banquet/2020ProductionFiles/' + firebase.auth().currentUser.email + '/' + timestamp + "/" + file.name);
+            var task = storageRef.put(file);
+            tasks.push(task);
+            task.on('state_changed',
+                    function progress(snapshot) {
+                      // console.log("Snapshot");
+                      // console.log(snapshot);
+                      var percentage = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                      console.log(file.name,": ",Math.round(percentage,2),"% - ",(snapshot.bytesTransferred),"bytes / ", (snapshot.totalBytes),"bytes")
+                      uploader.value = percentage;
+                    },
+                    function error(err) {
+                      console.error("[Error] An error occurred while uploading. Details: " + err);
+                      uploaderMessage.innerHTML = uploaderMessage.innerHTML + "<span class='failure'>An error occurred while uploading " + file.name + ". Please try again.</span>"
+                    },
+                    function complete() {
+                      console.log("Finished uploading " + file.name);
+                      uploaderMessage.innerHTML = uploaderMessage.innerHTML + " <span class='success'>Successfully uploaded " + file.name + ".</span>";
+                    }
+            )
+          }
+        } else {
+          alert("You must be signed in to upload. You cannot be in an incognito/private session.")
+          firebase.auth().signInWithRedirect(provider);
+        }
+      });
+    </script>
+  </body>
+</html>
